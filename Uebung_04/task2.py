@@ -266,7 +266,7 @@ def optimize_vmax(q_target, beta, vmax0, iters, eps, link_masses, joint_damping,
             hess_row = []
             for j in range(n_joints):
                 if i == j:
-                    hess_element = 4 * force[i] * q_target[i] * joint_damping[i] + beta[i]/(q_target[i]**2)
+                    hess_element = 2 * q_target[i] ** 2 * joint_damping[i] ** 2
                     hess_row.append(float(hess_element))
                 else:
                     hess_row.append(0.)

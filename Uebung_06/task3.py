@@ -1,5 +1,14 @@
 import numpy as np
 from tasks.task2 import inverse_dynamics
+##
+"""
+Gruppe 183
+MitgliederList 
+Yi Cui, 2758172
+Han li, 2756970
+Paul Galm, 2664282
+"""
+##
 
 
 def compute_torques(ctrl_params, q, q_desired, dq, dq_desired):

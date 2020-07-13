@@ -1,10 +1,8 @@
+# Author: Yi Cui, 2758172
+
 import numpy as np
 import pandas as pd
-
 from matplotlib import pyplot as plt
-
-
-from tasks.task2 import newton
 
 
 def expl_euler(f_dyn, x_k, dt):
@@ -56,7 +54,6 @@ def impl_euler(f_dyn, x_k, dt):
         x_k_1   np.ndarray((n, 1))   the next state x_{k+1}
     ------------------------------------------------------------------------
     """
-    import scipy.optimize
     # x_k+1 = x_k + h*f(x_k+1)
     # --> F(x_k+1) = 'x_k+1 - (x_k+1 = x_k + h*f(x_k+1)) == 0'
     # guarantee correct size
@@ -65,10 +62,53 @@ def impl_euler(f_dyn, x_k, dt):
     # implement implicit Euler method
     def F_impl(x_k_):
         x_k_ = x_k_.reshape((-1, 1))
-        return (x_k_ - x_k - dt*f_dyn(x_k_)).flatten()
+        return (x_k_ - x_k - dt * f_dyn(x_k_)).flatten()
 
-    # use scipy.opimize to calculate
-    x_k_1 = scipy.optimize.fsolve(F_impl, (x_k + dt * f_dyn(x_k)).flatten())
+    # implement newton method (from supplement.py)
+    def newton(x0, iters, eps, f, df):
+        """ solve the Equation """
+        x0 = x0.copy()
+        x1 = x0.copy()
+        for k in range(iters):
+            x1 = x0 - np.linalg.inv(df) @ f(x0)
+
+            # Stop criteria
+            if np.linalg.norm(x1 - x0) < eps:
+                return x1
+            x0 = x1
+
+        return x1
+
+    # implement forwardDQ method (from supplement.py)
+    def forwardDQ(f, x, d):
+        """ find the Jacobian matrix """
+        # number of dimensions of x and d
+        n = x.shape[0]
+
+        f_x = f(x)
+        Jx = np.empty((f_x.shape[0], n))
+
+        el = np.array(list(range(n)))
+        for i in range(n):
+            d_i = d[i]
+            e_i = (el == i).astype(np.int).reshape(-1, 1)  # create binary mask
+            x_ = x + e_i * d_i
+            f_i = (f(x_) - f_x) / d_i
+            Jx[:, i] = f_i.squeeze()
+
+        return Jx
+
+    # two method available
+    try:
+        # use scipy.opimize to calculate
+        import scipy.optimize
+
+        x_k_1 = scipy.optimize.fsolve(F_impl, (x_k + dt * f_dyn(x_k)).flatten())
+    except ImportError:
+        # use customize newton method and
+        x_k_1 = newton(x0=(x_k + dt * f_dyn(x_k)).flatten(), iters=500, eps=1e-8,
+                       f=F_impl,
+                       df=forwardDQ(F_impl, (x_k + dt * f_dyn(x_k)).flatten(), dt * np.ones(x_k.shape).flatten()))
 
     return np.array(x_k_1).reshape((-1, 1))
 
@@ -97,10 +137,10 @@ def heun(f_dyn, x_k, dt):
 
     # assign intermediate variables (derivative)
     s_1 = f_dyn(x_k)
-    s_2 = f_dyn(x_k + dt*s_1)
+    s_2 = f_dyn(x_k + dt * s_1)
 
     # implement Heun's method
-    x_k_1 = x_k + dt/2 * (s_1 + s_2)
+    x_k_1 = x_k + dt / 2 * (s_1 + s_2)
 
     return x_k_1
 
@@ -132,12 +172,12 @@ def rk4(f_dyn, x_k, dt):
 
     # assign intermediate variables (derivative)
     s_1 = f_dyn(x_k)
-    s_2 = f_dyn(x_k + dt/2 * s_1)
-    s_3 = f_dyn(x_k + dt/2 * s_2)
+    s_2 = f_dyn(x_k + dt / 2 * s_1)
+    s_3 = f_dyn(x_k + dt / 2 * s_2)
     s_4 = f_dyn(x_k + dt * s_3)
 
     # implement Heun's method
-    x_k_1 = x_k + dt / 6 * (s_1 + 2*s_2 + 2*s_3 + s_4)
+    x_k_1 = x_k + dt / 6 * (s_1 + 2 * s_2 + 2 * s_3 + s_4)
 
     return x_k_1
 
@@ -188,7 +228,40 @@ def plot_solver_data(computation_times, actual_trajectories, solver, tmax=12, dt
     axs_1[0].plot(time_serires, q[2, :], label="joint 3")
     axs_1[0].legend(bbox_to_anchor=(0.5, -0.15), loc='lower center')
 
-    axs_1[1] = computation_times.T.plot.bar()
+    method_space = ['VREP', 'ImplEuler', 'ExplEuler', 'Heun', 'RK']
+    for i in range(len(method_space)):
+        axs_1[1].bar(np.arange(3)+i/5, computation_times.iloc[i], 0.2, label=str(method_space[i]))
+    axs_1[1].set_title('benötigte Rechenzeit für jedes Verfahren')
+    axs_1[1].set_ylabel('time in s')
+    axs_1[1].set_xticks(np.arange(3)+0.5)
+    axs_1[1].set_xticklabels(['0.05', '0.01', '0.005'])
+    axs_1[1].legend(bbox_to_anchor=(0.5, -0.15), loc='lower center')
+
+    # plot 2
+    fig_2, axs_2 = plt.subplots(nrows=1, ncols=3, figsize=(20, 10))
+
+    time_step = [0.05, 0.01, 0.005]
+    for i, step in enumerate(time_step):
+        axs_2[i].set_title(f"Absoluter Fehler in Schrittweite {step}")
+        axs_2[i].set_xlabel('Rechenzeit in s')
+        axs_2[i].set_ylabel('Absoluter error')
+
+        # calculate baseline
+        time_serires = np.arange(0, tmax / step) / (1 / step)
+        time_serires_all = np.vstack((time_serires, time_serires, time_serires)).reshape((3, -1))
+        q = solver(time_serires_all)
+
+        axs_2[i].plot(step*np.arange(len(actual_trajectories[step]['ExplEuler'][i, :])),
+                      abs(q[i, :] - actual_trajectories[step]['ExplEuler'][i, :]), label="'explEuler'")
+        axs_2[i].plot(step*np.arange(len(actual_trajectories[step]['ImplEuler'][i, :])),
+                      abs(q[i, :] - actual_trajectories[step]['ImplEuler'][i, :]), label="implEuler")
+        axs_2[i].plot(step*np.arange(len(actual_trajectories[step]['Heun'][i, :])),
+                      abs(q[i, :] - actual_trajectories[step]['Heun'][i, :]), label="Heun")
+        axs_2[i].plot(step*np.arange(len(actual_trajectories[step]['RK'][i, :])),
+                      abs(q[i, :] - actual_trajectories[step]['RK'][i, :]), label="RK4")
+        axs_2[i].plot(step*np.arange(len(actual_trajectories[step]['VREP'][i, :])),
+                      abs(q[i, :] - actual_trajectories[step]['VREP'][i, :]), label="VREP")
+        axs_2[i].legend(bbox_to_anchor=(0.5, -0.15), loc='lower center')
 
     plt.show()
 
@@ -196,46 +269,46 @@ def plot_solver_data(computation_times, actual_trajectories, solver, tmax=12, dt
 
 
 if __name__ == '__main__':
-    # # Differential equations with start value
-    # p1 = lambda x: 0.5 * x ** 2 + 2 * x - 3
-    #
-    # # Aufgaba 1.1
-    # x1 = np.ones((1, 1))
-    # x1_hist = x1.copy()
-    # for i in range(3):
-    #     x1 = expl_euler(p1, x1, 1)
-    #     x1_hist = np.append(x1_hist, x1)
-    #
-    # x1_expected = np.array([1, 0.5, -1.375, -6.179687])
-    # print(f'explizite Euler-Verfahren error : {np.linalg.norm(x1_hist - x1_expected)}')
-    #
-    # # Aufgabe 1.2
-    # x1 = np.ones((1, 1))
-    # x1_hist = x1.copy()
-    # for i in range(3):
-    #     x1 = impl_euler(p1, x1, 1)
-    #     x1_hist = np.append(x1_hist, x1)
-    #
-    # x1_expected = np.array([1.0, 1.23606798, 1.12787783, 1.17812863])
-    # print(f'implizite Euler-Verfahren error : {np.linalg.norm(x1_hist - x1_expected)}')
-    #
-    # # Aufgabe 1.3
-    # x1 = np.ones((1, 1))
-    # x1_hist = x1.copy()
-    # for i in range(3):
-    #     x1 = heun(p1, x1, 1)
-    #     x1_hist = np.append(x1_hist, x1)
-    # x1_expected = np.array([1.0, -0.1875, -3.76951503, -1.21651473])
-    # print(f'Heun-Verfahren error : {np.linalg.norm(x1_hist - x1_expected)}')
-    #
-    # # Aufgabe 1.4
-    # x1 = np.ones((1, 1))
-    # x1_hist = x1.copy()
-    # for i in range(3):
-    #     x1 = rk4(p1, x1, 1)
-    #     x1_hist = np.append(x1_hist, x1)
-    # x1_expected = np.array([1.0, -0.97578688, -4.49632406, -3.86973236])
-    # print(f'Runge-Kutta-Verfahren vierter Ordnung. error : {np.linalg.norm(x1_hist - x1_expected)}')
+    # Differential equations with start value
+    p1 = lambda x: 0.5 * x ** 2 + 2 * x - 3
+
+    # Aufgaba 1.1
+    x1 = np.ones((1, 1))
+    x1_hist = x1.copy()
+    for i in range(3):
+        x1 = expl_euler(p1, x1, 1)
+        x1_hist = np.append(x1_hist, x1)
+
+    x1_expected = np.array([1, 0.5, -1.375, -6.179687])
+    print(f'explizite Euler-Verfahren error : {np.linalg.norm(x1_hist - x1_expected)}')
+
+    # Aufgabe 1.2
+    x1 = np.ones((1, 1))
+    x1_hist = x1.copy()
+    for i in range(3):
+        x1 = impl_euler(p1, x1, 1)
+        x1_hist = np.append(x1_hist, x1)
+
+    x1_expected = np.array([1.0, 1.23606798, 1.12787783, 1.17812863])
+    print(f'implizite Euler-Verfahren error : {np.linalg.norm(x1_hist - x1_expected)}')
+
+    # Aufgabe 1.3
+    x1 = np.ones((1, 1))
+    x1_hist = x1.copy()
+    for i in range(3):
+        x1 = heun(p1, x1, 1)
+        x1_hist = np.append(x1_hist, x1)
+    x1_expected = np.array([1.0, -0.1875, -3.76951503, -1.21651473])
+    print(f'Heun-Verfahren error : {np.linalg.norm(x1_hist - x1_expected)}')
+
+    # Aufgabe 1.4
+    x1 = np.ones((1, 1))
+    x1_hist = x1.copy()
+    for i in range(3):
+        x1 = rk4(p1, x1, 1)
+        x1_hist = np.append(x1_hist, x1)
+    x1_expected = np.array([1.0, -0.97578688, -4.49632406, -3.86973236])
+    print(f'Runge-Kutta-Verfahren vierter Ordnung. error : {np.linalg.norm(x1_hist - x1_expected)}')
 
     # Aufgabe 2
     numberOfJoints = 3
@@ -244,3 +317,56 @@ if __name__ == '__main__':
     modelledJointDamping = np.array([3.0, 3.0, 3.0])
     gravityConstant = 9.81
     jointLimits_raw = np.array([-0.002, 0.0, 0.0, 0.4, 0.4, 0.4])
+
+    M = np.array([
+        [modelledPartialMasses[1] + modelledPartialMasses[2] + modelledPartialMasses[3], 0, 0],
+        [0, modelledPartialMasses[2] + modelledPartialMasses[3], 0],
+        [0, 0, modelledPartialMasses[3]]
+    ])
+    D = np.array([
+        [modelledJointDamping[0], 0, 0],
+        [0, modelledJointDamping[1], 0],
+        [0, 0, modelledJointDamping[2]]
+    ])
+    g = np.array([gravityConstant, 0, 0]).reshape(-1, 1)
+    fg = M @ g
+
+    A = np.array([0.3, 0.4, 0.5]).reshape(-1, 1)
+
+
+    def ode_solution(time, q_start=np.zeros((3, 1)), A=A, M=M, D=D, fg=fg):
+        """ Computes exact joint values for given dynamic system. """
+
+        A = A
+        M = np.diagonal(M).reshape((-1, 1))
+        D = np.diagonal(D).reshape((-1, 1))
+        fc = fg
+
+        M_sq = M * M
+        D_sq = D * D
+
+        # compute solution coefficients
+        n = M_sq + D_sq
+
+        K1 = -(A * M) / n
+        K2 = -(A * D) / (M_sq + D_sq)
+        K3 = (fc - fg) / D
+
+        kappa1 = (A * D + D_sq * q_start - fc * M + fg * M) / D_sq
+        kappa2 = (M * (fc - fg)) / D_sq - A * M_sq / (D * n)
+
+        # lambda1 = np.zeros((3, 1))
+        lambda2 = - D / M
+
+        # solution of forward dynamics ode
+        q_1 = kappa1 + kappa2 * np.exp(lambda2 * time)
+        q_2 = K1 * np.sin(time) + K2 * np.cos(time) + K3 * time
+        q = q_1 + q_2
+
+        return q
+
+    # # problematisch
+    # computation_times = pd.read_pickle("computation_times.pkl")
+    # actual_trajectories = pd.read_pickle("actual_trajectories.pkl")
+    #
+    # plot_solver_data(computation_times, actual_trajectories, ode_solution)

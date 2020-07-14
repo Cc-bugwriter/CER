@@ -168,6 +168,31 @@ def modelbased_friction_compensation(approx_model, param, u, q, dq):
     return u
 
 
+def plot_model_differences(time_scale, Q1, Q2, Q3):
+    # -----------------------------------------------------------------
+    #  This method plots the data collected in runP5.
+    # -----------------------------------------------------------------
+    #  input:
+    #   time_scale    [N]             Time scale (x values)
+    #   Q1            [Nx3]           Joint values for first simulation
+    #   Q2            [Nx3]           Joint values for second simulation
+    #   Q3            [Nx3]           Joint values for third simulation
+    # -----------------------------------------------------------------
+    fig, axs = plt.subplots(3, 1)
+
+    namespace = ["F1", "F2", "F3"]
+    for i in range(3):
+        axs[i].plot(time_scale, Q1[:, i], label="first simulation")
+        axs[i].plot(time_scale, Q2[:, i], label="second simulation")
+        axs[i].plot(time_scale, Q3[:, i], label="third simulation")
+        axs[i].set_xlabel('time')
+        axs[0].set_ylabel(namespace[i])
+        axs[0].grid(True)
+    plt.show()
+
+    pass
+
+
 if __name__ == "__main__":
     # test for task 5
     mfunc = motor_model_function

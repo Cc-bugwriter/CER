@@ -1,6 +1,5 @@
 import numpy as np
 from matplotlib import pyplot as plt
-
 from scipy.optimize import minimize as mini
 import unittest
 
@@ -33,29 +32,34 @@ def nonlinear_least_squares(motor_func, pStart, grid, data, approx_model):
     #   success        bool      the return state of the nonlinear solver
     # -----------------------------------------------------------------
     u, _ = motor_func(grid, approx_model, pStart)
-    p = pStart
 
-    def L(p):
-        u_x, _ = motor_func(grid, approx_model, p)
-        loss = 0
-        for x in range(len(data)):
-            lho = data[x - 1] - u_x[x - 1]
-            loss += 0.5 * np.linalg.norm(lho) ** 2
-        return loss
+    def L(pStart):
+        # calculate u_ist
+        u_ist, _ = motor_func(grid, approx_model, pStart)
 
-    def dL_dp():
-        # calculate u_x
-        u_x, _ = motor_func(grid, approx_model, p)
         # initial loss
         loss = 0
         # compute loss function
         for x in range(len(data)):
-            lho = data[x - 1] - u_x[x - 1]
+            lho = data[x - 1] - u_ist[x - 1]
+            loss += 0.5 * np.linalg.norm(lho) ** 2
+        return loss
+
+    def dL_dp(pStart):
+        # calculate u_ist
+        u_ist, _ = motor_func(grid, approx_model, pStart)
+
+        # initial loss
+        loss = 0
+        # compute loss function
+        for x in range(len(data)):
+            lho = data[x - 1] - u_ist[x - 1]
             loss += -lho
         return loss
 
     # use scipy to minimize
     results = mini(L, x0=pStart, method='SLSQP', tol=0.00001, options={'maxiter': 1000})
+    # results = mini(dL_dp, x0=pStart, method='SLSQP', tol=0.00001, options={'maxiter': 1000})
 
     # record result
     p = results.x.reshape((-1, 1))
